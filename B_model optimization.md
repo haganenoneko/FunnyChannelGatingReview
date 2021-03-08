@@ -16,7 +16,7 @@ A variety of models were implemented by specifying their transition matrices and
 
 All kinetic models used follow the chemical 'master' equation: $\frac{dx}{dt} = Ax$, where $x$ is a vector of states and $A$ denotes the transition matrix. The elements of $A$ are defined as: 
 
-- $A_{ij} = k_{ij}$ for $i \neq j$, and 
+- $A_{ij} = k_{ji}$ for $i \neq j$, where $k_{ji}$ is the rate from state $j$ to state $i$. 
 - $A_{ij} = -\sum^{N}_{j = 1 \\ i \neq j} k_{ij}$ for $i = j$, where $N$ is the total number of states.
 
 We also have that $\sum x = 1$, so the number of equations can be reduced by one, yielding a modified form of the 'master' equation: $\frac{dx}{dt} = A_{N-1} x_{N-1} + k$, where the subscript $N-1$ indicates that the reduced dimensionality of the respective quantities. $k$ is a vector containing rates from the state which was removed. 
