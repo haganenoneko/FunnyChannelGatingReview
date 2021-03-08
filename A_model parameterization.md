@@ -1,6 +1,6 @@
 # A. Parameterization
 
-<img src="C:\Users\delbe\Downloads\wut\wut\Post_grad\UBC\SPRING 2020\Writing\Model review\for_repo\param_comparison_2.png" alt="param_comparison_2" style="zoom:7%;" />
+<img src=".\param_comparison_2.png" alt="param_comparison_2" style="zoom:7%;" />
 
 **Figure A1. Parameter values for wild-type and mutant simulations.**
 
@@ -12,7 +12,7 @@ $$ \alpha(V) = \alpha_0 \exp(-V/s_\alpha) \\ \beta(V) = \beta_0 \exp(V/s_\alpha)
 
 For the wild-type data, parameters for fits using a four-state model (WT_4) and a six-state model (WT_6a, WT_6b; Figure A2 below) are shown. The latter has been shown as two sets, because this model has two voltage-dependent steps each between closed states and between open states. 
 
-<img src="C:\Users\delbe\AppData\Roaming\Typora\typora-user-images\image-20210307235651594.png" alt="image-20210307235651594" style="zoom:50%;" />
+<img src=".\image-20210307235651594.png" alt="image-20210307235651594" style="zoom:50%;" />
 
 **Figure A2. Six-state model from Hummert et al. (2018).**
 
