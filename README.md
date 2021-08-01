@@ -4,7 +4,7 @@ Update (July 22, 2021): Code will be uploaded shortly (within a week or so) afte
 Supplementary figures and code for the review "Analysis of voltage-dependent gating of funny channels by kinetic models"
 
 ## Data files
-We provide normalized time courses and steady-state data in .CSV files, compressed in `data.rar`, which can be opened using (WinRAR)[https://www.win-rar.com/start.html?&L=0]. The files are as follows:
+We provide normalized time courses and steady-state data in .CSV files, compressed in `data.rar`, which can be opened using [WinRAR](https://www.win-rar.com/start.html?&L=0)
 ```
 ├── data.rar
 │   ├── ramentol_normalized_wt.png    # plot of normalized WT current and fluorescence time traces 
