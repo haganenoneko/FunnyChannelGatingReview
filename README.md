@@ -28,7 +28,7 @@ We provide normalized time courses and steady-state data in .CSV files, compress
 
 Note that the implementations of simulations and fitting are not well-optimized, although common performance tips are suggested in each file. 
 
-The scripts were written in `Julia 1.4.0`, but are compatible with newer versions, as well (1.6.1 at the time of writing). Optimization takes about 2-4 hours on a laptop with the following specifications
+The scripts were written in `Julia 1.4.0`, but are compatible with newer versions, as well (`1.6.1` at the time of writing). Optimization takes about 2-4 hours on a laptop with the following specifications
 ```
 > versioninfo()
 Platform Info:
