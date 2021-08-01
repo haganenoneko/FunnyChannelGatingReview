@@ -12,6 +12,19 @@ oi = 3
 # indices of activated states 
 ai = [1, 2, 4, 5]
 
+"""
+Notes on how performance can be improved:
+* Modify the objective function so that `db_pars` is called only once per evoluation of the objective function.
+    i.e. `tm(...)` should not have to call `db_pars` 
+* Modify `tm(...)` to update a pre-allocated array in-place
+* Compute voltage dependent rates `a1, b1, ...` in `tm(...)` in one line by directly multiplying the coefficients `a0, b0, ...`
+* Use a static vector `SVector` for parameters, e.g. the output of `db_pars`
+* Use views of the transition matrix to define the ODE, i.e. argument `Q` in `rhs!(...)`
+
+Similar performance tips are available in `main_v4.jl`. 
+The above apply equally to `four_3s_ramentol.jl`.
+"""
+
 function db_pars(pars::AbstractVector{}, db; fmt="x")::Vector{}
     """
     Uses OR -> OA (a2; c0, sc) and OA-OH (a3; e0, se) transitions to set detailed balance 
