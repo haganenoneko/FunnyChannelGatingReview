@@ -1,5 +1,4 @@
-using Random 
-using Distributions
+using Random, Distributions
 
 Random.seed!(1234)
 
@@ -33,12 +32,6 @@ function db_pars(pars::AbstractVector{}, db; fmt="x")::Vector{}
                 g1, h1, h2 = exp.(pars[9:end])
                 g2 = (g1*d0*h2*a0)/(h1*b0*c0)
             elseif db == "h2"
-                # use proportion of g1 and h1 from fit wwithout detailed balance to set value of `h1`, given `g1`
-                # i.e. D46 
-                # g1, g2 = exp.(pars[9:end])
-                # h1 = 11.1853*g1 
-                
-                # normal 
                 g1, g2, h1 = exp.(pars[9:end])
                 h2 = (g2*c0*h1*b0)/(a0*g1*d0)
             end 
@@ -62,7 +55,7 @@ function db_pars(pars::AbstractVector{}, db; fmt="x")::Vector{}
                 a0 = (b0*g2*c0*h1)/(g1*d0*h2)   
                 sa = 1/( (1/sc) - (1/sb) + (1/sd) )
             else 
-                println("   $db not understood as detailed balance condition.")
+                error("   $db not understood as detailed balance condition.")
             end 
         end 
     end
@@ -105,40 +98,31 @@ function rhs!(du, u, Q, t)
     du .= Q[:,2:end] * u + Q[:,1] 
 end 
 
-function rhs_nested_tm!(du, u, p, t)
-    """
-    p = [*params, v], where *params is the model parameters and v is voltage 
-
-    This versioon of the ODE solves for the transition matrix at each step
-    """
-    a1, b1, a2, b2, g1, g2, h1, h2, v = p
-    du[1] = -(b1 + g1 + a1)*u[1] - a1*u[2]  + (h1-a1)*u[3] + a1 
-    du[2] = -g2*u[1] - (a2+g2+h2)*u[2] + (b2-g2)*u[3] + g2 
-    du[3] = g1*u[1] + a2*u[2] - (b2+h1)*u[3] 
-end 
 
 function prepare_BoundsAndParams(pars::Array{Float64,1}, bounds, db)
     # remove entries from parameter and bound arrays given detailed balance 
     if db == true || db == "x" 
         return pars, bounds 
     else
+        ps = copy(pars)
+        bds = copy(bounds)
         if db == "a" 
-            deleteat!(pars, 1:2)
-            deleteat!(bounds, 1:2)
+            deleteat!(ps, 1:2)
+            deleteat!(bds, 1:2)
         elseif db == "b"
-            deleteat!(pars, 3:4)
-            deleteat!(bounds, 3:4)
+            deleteat!(ps, 3:4)
+            deleteat!(bds, 3:4)
         elseif db == "c" 
-            deleteat!(pars, 5:6)
-            deleteat!(bounds, 5:6)
+            deleteat!(ps, 5:6)
+            deleteat!(bds, 5:6)
         elseif db == "d" 
-            deleteat!(pars, 7:8)
-            deleteat!(bounds, 7:8)
+            deleteat!(ps, 7:8)
+            deleteat!(bds, 7:8)
         else 
             println("$db not understood. Available are: 'a', 'b', 'c', 'd'.")
         end 
     end 
-    return pars, bounds 
+    return ps, bds 
 end 
 
 bds = [
@@ -183,7 +167,4 @@ hnc2_bds = [
 ]
 
 ln_par_bds = [log.(x) for x in hnc2_bds] 
-# p0 = [rand(Uniform(x[1], x[2])) for x in ln_par_bds]
 
-p0 = [-16.90855102824403, 2.6882152420854157, -4.586645664498318, 3.582484073138729, -14.185974357968991, 2.606618507819889, -8.707160364281613, 3.8155718235640297, -5.463962426279009, -17.247457947864344, -7.161935369365816, -12.102339520892818]
-# p0 .+= rand(Normal(0, 1), length(p0)) 
