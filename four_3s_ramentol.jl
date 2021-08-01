@@ -14,6 +14,18 @@ states_to_save = [2, 3]
 # parameter names 
 parnames = ["a0", "sa", "b0", "sb", "c0", "sc", "d0", "sd", "g1", "g2", "h1", "h2"]
 
+"""
+Notes on how performance can be improved:
+* Modify the objective function so that `db_pars` is called only once per evoluation of the objective function.
+    i.e. `tm(...)` should not have to call `db_pars` 
+* Modify `tm(...)` to update a pre-allocated array in-place 
+* Use a static vector `SVector` for parameters, e.g. the output of `db_pars`
+* Use views of the transition matrix to define the ODE, i.e. argument `Q` in `rhs!(...)`
+
+Similar performance tips are available in `main_v4.jl`. 
+The above apply equally to `six_hum.jl`.
+"""
+
 function db_pars(pars::AbstractVector{}, db; fmt="x")::Vector{}
     #pars are ln-transformed 
     if db == "x"
