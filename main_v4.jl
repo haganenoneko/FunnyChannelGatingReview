@@ -3,23 +3,33 @@
 
 using DifferentialEquations, OrdinaryDiffEq
 using Random, LinearAlgebra, Statistics
-using GCMAES, BlackBoxOptim
-using Zygote, ForwardDiff
-using Optim, NLSolversBase, AdvancedHMC
+using GCMAES, BlackBoxOptim, ForwardDiff
 using Glob, CSV, DataFrames, Dates
 using Plots 
 
-#convenience method to fit data
-model_name = "four_3s_ramentol.jl"
-include("C:\\Users\\delbe\\Downloads\\wut\\wut\\Post_grad\\UBC\\Research\\lab\\Github_repos\\hcn-gating-kinetics\\src\\models\\$model_name")
+"""
+Notes on how performance can be improved:
+* Modify the objective function so that `db_pars` is called only once per evoluation of the objective function.
+    i.e. `tm(...)` should not have to call `db_pars` 
+* Remove bounds-checking from the objective function. Originally, bounds-checking was added for 
+    straightforward use with algorithms that didn't support constraints.
+* Pre-allocate a steady-state vector that is modified in-place by `get_ss(...)`
+* If using GCMAES for optimization, the initial step-size (coordinate-wise standard deviation) can be tuned. 
+    Similarly, parameters for differential evolution can be tuned.
+    For more details, see the documentation for the respective packages (GCMAES.jl and BlackBoxOptim.jl)
+"""
+
+# load model
+model_name = "...."
+include("[path to model files]/$model_name")
 println("Using model $model_name")
 
-#print description of model 
-println(description)
+# path to data .csv files 
+data_path = "..." 
 
 ### Conditions
 DB_CONDITION = "c"     
-# BB for BlackBoxOptim, GCMAES, or Optim (not implemented yet)       
+# BB for BlackBoxOptim or GCMAES    
 OPT_OR_NOT = "GCMAES"       
 FA_OR_WT = "mut" 
 OPT_MAX_ITER = 800
@@ -58,8 +68,6 @@ end
 ################################################# 
 """LOAD DATA FILES"""
 #################################################
-#data path 
-data_path = ".\\data\\ramentol_digitized\\"
 
 if FA_OR_WT == "mut"
     ss_path = string(data_path, "mut_ss.csv")
@@ -109,11 +117,10 @@ function extract_VoltageAndTimes(data::Array{DataFrame, 1};
 
     for i = 1:Nd
         colnames = names(data[i])
-        # println(data[i][end-5:end,1:6])
+        
         # times and voltage columns are present as: "-150_t, -150_i, etc.", so we remove the last two characters 
         # since the columns are paired, we take every second column for time or voltage 
         v = [parse(Float64, String(n)[1:end-2]) for n in colnames[1:2:end]]
-        # println(typeof(v))
         voltages[i] = v 
 
         # number of traces is half the number of columns, since we have time columns for each trace 
@@ -155,9 +162,6 @@ end
 # voltage, times, and shared indices for current-time 
 extracted_i = extract_VoltageAndTimes(data_files[2:3])
 extracted_f = extract_VoltageAndTimes(data_files[4:5])
-# println(extracted_f["voltages"], "\n", extracted_f["shared_idx"])
-# println(extracted_i["voltages"], "\n", extracted_i["shared_idx"])
-# asdf
 
 #################################################
 """SIMULATION METHODS""" 
@@ -171,49 +175,20 @@ function get_ss(p::AbstractVector{}, vhold, db)::Vector{}
     return Q[:,2:end] \ (-1 .* Q[:,1])
 end 
 
-function apply_norm(arr, peak)
-    for i in 1:length(arr)
-        arr[i] = [y ./ peak for y in arr[i]]        
-    end 
-    return arr 
-end 
-
-function norm(y_act, y_de; peak_min=0.95)
-    peak = maximum([maximum(y) for y in y_act])
-
-    if peak > peak_min
-        for i = 1:length(y_act) 
-            y_act[i] ./= peak 
-        end 
-        for i = 1:length(y_de) 
-            y_de[i] ./= peak 
-        end 
-    end 
-    
-    return y_act, y_de 
-end 
-
-function solve_odes(inits, Q, 
-                    times::Array{Float64,1})
-    # println(inits)
+function solve_odes(inits, Q, times::Array{Float64,1})
     prob = ODEProblem(rhs!, eltype(Q).(inits), (times[1], times[end]), Q)
-    
-    sol = solve(prob, TRBDF2(), 
-            saveat = times,
-            reltol=1e-6, abstol=1e-6, maxiters=1e6)
-
+    sol = solve(prob, TRBDF2(), saveat = times, reltol=1e-8, abstol=1e-8, maxiters=1e6)
     return sol 
 end 
 
 function one_sim(pars::AbstractVector{T}, data, 
                 u0::AbstractVector{}, Qhold, db; 
-                pmax_min=0.7, states="open", normalize=false) where T 
+                pmax_min=0.7, states="open") where T 
 
     va, vd = data["voltages"]
     ta, td = data["times"]
     shared = data["shared_idx"]
 
-    # y_act = Array{Array{Float64, 2}, 1}(undef, length(va))
     y_act = Array{Array{T, 1}, 1}(undef, length(va))
     y_de = Array{Array{T, 1}, 1}(undef, length(vd))
 
@@ -244,27 +219,12 @@ function one_sim(pars::AbstractVector{T}, data,
         end 
     end 
     
-    if normalize == true 
-        if states == "active"
-            # subtract the minimum, as that seems to be have been done to mutant FV 
-            min_f = minimum([minimum(y) for y in y_act])
-            # but, require that minimum activated is <= 2% 
-            if min_f <= 0.02
-                for i = 1:length(y_act)
-                    y_act[i] .-= min_f 
-                end 
-            end 
-        end 
-        # scale maximum value of open or activated states to 1 
-        return norm(y_act, y_de; peak_min=pmax_min)
-    else 
-        return y_act, y_de 
-    end 
+    return y_act, y_de 
 end 
 
 function one_sim_LossOnly(pars::AbstractVector{}, data, RawData, 
                         u0::AbstractVector{}, Qhold, db; 
-                        pmax_min=0.7, states="open", normalize=false, method="sse") 
+                        pmax_min=0.7, states="open", method="sse") 
 
     va, vd = data["voltages"]
     ta, td = data["times"]
@@ -274,70 +234,38 @@ function one_sim_LossOnly(pars::AbstractVector{}, data, RawData,
     E = 0. 
     j = 0
 
-    if normalize == false 
-        for i in 1:length(va)
-            Qa = tm(va[i], pars, db)
-            sol = solve_odes(u0, Qa, ta[i])
+    for i in 1:length(va)
+        Qa = tm(va[i], pars, db)
+        sol = solve_odes(u0, Qa, ta[i])
+
+        if states == "open"
+            y_act = vec(sum(sol[oi:end,:], dims=1))
+            x = traces[1][i] 
+        else 
+            y_act = vec(sum(sol[ai,:], dims=1))
+            x = traces[1][i] 
+        end 
+
+        E += sum( (x .- y_act) .^ 2 )/length(ta[i])
+
+        if va[i] in vd 
+            j += 1 
+            h = shared[j] 
+
+            sol = solve_odes(sol[end], tm(vhold_d, pars, db), td[h])
 
             if states == "open"
-                y_act = vec(sum(sol[oi:end,:], dims=1))
-                x = traces[1][i] 
+                y_de = vec(sum(sol[oi:end,:], dims=1))
+                x = traces[2][h] 
             else 
-                y_act = vec(sum(sol[ai,:], dims=1))
-                x = traces[1][i] 
+                y_de = vec(sum(sol[ai,:], dims=1))
+                x = traces[2][h]
             end 
-            
-            E += sum( (x .- y_act) .^ 2 )/length(ta[i])
-            
-            if va[i] in vd 
-                j += 1 
-                h = shared[j] 
-                
-                sol = solve_odes(sol[end], tm(vhold_d, pars, db), td[h])
-                
-                if states == "open"
-                    y_de = vec(sum(sol[oi:end,:], dims=1))
-                    x = traces[2][h] 
-                else 
-                    y_de = vec(sum(sol[ai,:], dims=1))
-                    x = traces[2][h]
-                end 
-                
-                E += sum( (x.- y_de) .^ 2 )/length(td[h])
-            end 
+
+            E += sum( (x.- y_de) .^ 2 )/length(td[h])
         end 
-        return E 
-    else 
-        y_act, y_de = one_sim(pars, data, u0, Qhold, db;
-                        pmax_min=pmax_min, states=states, normalize=normalize)
-        for (i, ysim) in enumerate(y_act)
-            # if length(ysim) != length(traces[1][i])
-            #     return 1e6
-            # else 
-            if method == "LLH"
-                σ = std(ysim[end-5:end])^2
-                E += (sum( (traces[1][i] .- ysim) .^2 ) / (2*(1.21e-4))) + (length(ysim)/2)*log(2*π*(1.21e-4))
-            else 
-                # E += sum( (traces[1][i] .- ysim) .^2 ) 
-                E += sum( (traces[1][i] .- ysim) .^2 ) / length(ysim)
-            end 
-            # end 
-        end 
-        for (i, ysim) in enumerate(y_de)
-            # if length(ysim) != length(traces[2][i])
-            #     return 1e6 
-            # else 
-            if method == "LLH"
-                σ = std(ysim[end-5:end])^2
-                E += (sum( (traces[2][i] .- ysim) .^2 ) / (2*(1.21e-4))) + (length(ysim)/2)*log(2*π*(1.21e-4))
-            else 
-                # E += sum( (traces[2][i] .- ysim) .^2 ) 
-                E += sum( (traces[2][i] .- ysim) .^2 ) / length(ysim)
-            end 
-            # end 
-        end 
-        return E
     end 
+    return E 
 end 
 
 function sim(pars::AbstractVector{}; 
@@ -363,38 +291,28 @@ function sim(pars::AbstractVector{};
     if loss_only == true 
         if error_method == "sse"
             loss = one_sim_LossOnly(pars, data_i, RawData_i, inits, Qhold, db; 
-                                    pmax_min=0.9, states="open", 
-                                    normalize=true, method="sse")
+                                    pmax_min=0.9, states="open", method="sse")
             loss += one_sim_LossOnly(pars, data_f, RawData_f, inits, Qhold, db; 
-                                    pmax_min=0.85, states="active", 
-                                    normalize=true, method="sse")
+                                    pmax_min=0.85, states="active", method="sse")
             return loss 
         elseif error_method == "LLH"
             loss = one_sim_LossOnly(pars, data_i, RawData_i, inits, Qhold, db; 
-                                    pmax_min=0.9, states="open",
-                                    normalize=true, method="LLH")
+                                    pmax_min=0.9, states="open", method="LLH")
             loss += one_sim_LossOnly(pars, data_f, RawData_f, inits, Qhold, db; 
-                                    pmax_min=0.9, states="active", 
-                                    normalize=true, method="LLH")
+                                    pmax_min=0.9, states="active", method="LLH")
             return loss 
         else 
-            println("`error_method` can only be 'sse' or 'LLH'.")
-            asdf 
+            error("`error_method` can only be 'sse' or 'LLH'.")
         end 
     else 
-        sim_ia, sim_id = one_sim(pars, data_i, inits, Qhold, db; 
-                                states="open", normalize=true)
-        sim_fa, sim_fd = one_sim(pars, data_f, inits, Qhold, db; 
-                                states="active", normalize=true)
+        sim_ia, sim_id = one_sim(pars, data_i, inits, Qhold, db; states="open")
+        sim_fa, sim_fd = one_sim(pars, data_f, inits, Qhold, db; states="active")
         return sim_ia, sim_id, sim_fa, sim_fd 
     end 
 end
 
 #get a gv curve 
-function sim_ss(pars::AbstractVector{T};
-                data_ss = data_files[1],
-                db = DB_CONDITION,
-                loss_only=false, normalize=false) where T
+function sim_ss(pars::AbstractVector{T}; data_ss = data_files[1], db = DB_CONDITION, loss_only=false) where T
     
     y = zeros(T, (size(data_ss)[1], 2))  
     for i in 1:size(data_ss)[1] 
@@ -464,7 +382,6 @@ end
 function objective(pars)
     # check for negative values in db_pars 
     if any(x -> x < 0, db_pars(pars, DB_CONDITION))
-        # println("   negative")
         return 1e6
     else 
         # check whether parameters are in bounds 
@@ -478,46 +395,17 @@ function objective(pars)
         end 
 
         # check that maximal steady state open probability is > 0.9
-        if sum(get_ss(pars, 200, DB_CONDITION)[oi:end]) < 0.5
+        # if sum(get_ss(pars, 200, DB_CONDITION)[oi:end]) < 0.5
             # println("   maximal GV below threshold")
-            return 1e6
-        end 
+            # return 1e6
+        # end 
     end 
 
-    return sim(pars; loss_only=true) 
-    # loss += 0.5*sim_ss(pars; loss_only=true) 
-    # return loss 
-end 
-
-function mcmc_objective(pars)
-    # check for negative values in db_pars 
-    if any(x -> x < 0, db_pars(pars, DB_CONDITION))
-        return 1e6
-    else 
-        # check whether parameters are in bounds 
-        for (i, b) in enumerate(ln_par_bds)
-            if b[1] <= pars[i] <= b[2]
-                continue
-            else 
-                return 1e6
-            end 
-        end 
-
-        # check that maximal steady state open probability is > 0.9
-        if sum(get_ss(pars, 200, DB_CONDITION)[oi:end]) < 0.95
-            return 1e6
-        end 
-    end 
-
-    return sim(pars; loss_only=true, error_method="LLH") 
-    # loss += 0.5*sim_ss(pars; loss_only=true) 
-    # return loss 
+    return sim(pars; loss_only=true)
 end 
 
 # gradient of objective function 
 ∇objective(pars) = ForwardDiff.gradient(objective, pars)
-# println(∇objective(p0))
-# asdf 
 
 #################################################
 # OPTIMIZATION 
@@ -578,78 +466,16 @@ elseif OPT_OR_NOT == "BB"
         "Full parameters... \n Log-space  ", 
         db_pars(popt, DB_CONDITION; fmt="log"),
         )
-elseif OPT_OR_NOT == "Optim"
-    lower = [x[1] for x in ln_par_bds]
-    upper = [x[2] for x in ln_par_bds]
-    dfc = TwiceDifferentiableConstraints(lower, upper)
-
-
-    # optimize with LBFGSB 
-    # res = Optim.optimize(objective, p0, LBFGS(); autodiff = :forward)
-
-    # optimize with box constraints 
-    res = Optim.optimize(objective, dfc, p0, IPNewton())
-
-    # popt = Optim.minimizer(res)
-    
-    println("----------// RESULTS OF Optim //-----------",
-        "\n     Bounds... \n ", ln_par_bds,
-        "\n     Full parameters... \n Real-space  ", 
-        db_pars(popt, DB_CONDITION), 
-        "\n     Full parameters... \n Log-space  ", 
-        db_pars(popt, DB_CONDITION; fmt="log"),
-        "\n     Function value... \n    ",
-        Optim.minimum(res) 
-        )
 else
     popt = p0 
 end 
 
 #################################################
-# SAMPLING
-#################################################
-function do_sampling()
-    # parmaeter dimensionality
-    D = length(popt)
-    # initial parameter values 
-    initial_θ = copy(popt)
-    
-    # Set the number of samples to draw and warmup iterations
-    n_samples, n_adapts = 2_000, 1_000
-
-    # Define a Hamiltonian system
-    metric = DiagEuclideanMetric(D)
-    hamiltonian = Hamiltonian(metric, mcmc_objective, ForwardDiff)
-
-    # Define a leapfrog solver, with initial step size chosen heuristically
-    initial_ϵ = find_good_stepsize(hamiltonian, initial_θ)
-    integrator = Leapfrog(initial_ϵ)
-
-    # Define an HMC sampler, with the following components
-    #   - multinomial sampling scheme,
-    #   - generalised No-U-Turn criteria, and
-    #   - windowed adaption for step-size and diagonal mass matrix
-    proposal = NUTS{MultinomialTS, GeneralisedNoUTurn}(integrator)
-    adaptor = StanHMCAdaptor(MassMatrixAdaptor(metric), StepSizeAdaptor(0.8, integrator))
-
-    # Run the sampler to draw samples from the specified Gaussian, where
-    #   - `samples` will store the samples
-    #   - `stats` will store diagnostic statistics for each sample
-    samples, stats = sample(hamiltonian, proposal, initial_θ, n_samples, adaptor, n_adapts; progress=true)
-
-    output_dir = ".\\output\\MCMC\\"
-    fname = Dates.format(Dates.now(), "ddmmyy_HHMMSS")
-    writedlm(string(output_dir, "mcmc_samples_$fname,csv"), samples)
-    writedlm(string(output_dir, "mcmc_stats_$fname.csv"), stats)
-end 
-# do_sampling()
-#################################################
 # OUTPUT 
 #################################################
 println("   Objective value: ", objective(popt))
-println("   MCMC objective value: ", mcmc_objective(popt))
 
-# apply detailed balance to optimized parameters (or p0, if no optimization was done)
+# apply detailed balance to optimized parameters (or p0, if no optimization was done)        
 # output in log format 
 popt_full = db_pars(popt, DB_CONDITION; fmt="log")
 
