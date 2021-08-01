@@ -22,13 +22,22 @@ We provide normalized time courses and steady-state data in .CSV files, compress
 ```
 
 ## Scripts
-The scripts were written in `Julia 1.4.0`, but are compatible with newer versions, as well (1.6.1 at the time of writing). 
-
-`main_v4.jl` performs model-fitting using differential evolution or Covariance Matrix Adaptive Evolution Strategy (CMAES). Optimization takes about 2-4 hours on a laptop with the following CPU: `Intel i5-7200U CPU @ 2.50Ghz, 2712 MHz, 2 cores`. 
-
-Note that the implementations of simulations and fitting are not well-optimized, and that directories to data (above) and model (below) files need to be changed according to where the corresponding files are located. 
+`main_v4.jl` performs model-fitting using differential evolution or Covariance Matrix Adaptive Evolution Strategy (CMAES). Directories to data (above) and model (below) files need to be changed according to where the corresponding files are located. 
 
 `four_3s_ramentol.jl` and `six_hum.jl` specify the kinetic models (four- and six-state, respsectively). 
+
+Note that the implementations of simulations and fitting are not well-optimized, although common performance tips are suggested in each file. 
+
+The scripts were written in `Julia 1.4.0`, but are compatible with newer versions, as well (1.6.1 at the time of writing). Optimization takes about 2-4 hours on a laptop with the following specifications
+```
+> versioninfo()
+Platform Info:
+  OS: Windows (x86_64-w64-mingw32)
+  CPU: Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz
+  WORD_SIZE: 64
+  LIBM: libopenlibm
+  LLVM: libLLVM-11.0.1 (ORCJIT, skylake)
+```
 
 ## Miscellaneous
 'additional fitting results for wt and mutant with four state model.docx' shows simulations for the wild-type and depolarization-activated mutant under different conditions, such as without detailed balance, fitting only the activating step of the protocol, or the conditions shown in Figure 2 of the main text. 
